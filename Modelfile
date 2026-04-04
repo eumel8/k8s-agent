@@ -1,6 +1,9 @@
 # https://github.com/lloydchang/ollama-ollama/blob/main/docs/modelfile.md
 # ollama create gemma4-k8s -f Modelfile
 # ollama launch claude --model gemma4-k8s:latest
+# export ANTHROPIC_AUTH_TOKEN=ollama
+# export ANTHROPIC_API_KEY=""
+# export ANTHROPIC_BASE_URL=http://localhost:11434
 FROM gemma4:e2b
 PARAMETER num_ctx 64000
 #PARAMETER temperature 1
