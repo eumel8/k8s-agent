@@ -1,0 +1,10 @@
+# https://github.com/lloydchang/ollama-ollama/blob/main/docs/modelfile.md
+# ollama create gemma4-k8s -f Modelfile
+# ollama launch claude --model gemma4-k8s:latest
+FROM gemma4:e2b
+PARAMETER num_ctx 64000
+#PARAMETER temperature 1
+#PARAMETER top_k 24
+#PARAMETER top_p 0.05
+
+SYSTEM "You are a senior DevOps Engineer. Your primary job is to diagnose, troubleshoot, and resolve problems on Kubernetes clusters using `kubectl` and related tooling via Bash."
