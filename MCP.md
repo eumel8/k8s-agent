@@ -22,7 +22,29 @@ Für diesen Agenten sind drei MCP Server relevant, die alle **lokal** betrieben 
 
 ---
 
-## Konfiguration in opencode.jsonc
+## Ablageort der Konfiguration
+
+Die `opencode.json` kann an zwei Orten liegen — beide werden zusammengeführt:
+
+| Ort | Zweck | Git-tauglich |
+|---|---|---|
+| `~/.config/opencode/opencode.json` | Global für alle Projekte | Nein (enthält Secrets) |
+| `<projektverzeichnis>/opencode.json` | Projektspezifisch | Ja (nur ohne Secrets) |
+
+**Empfehlung:** MCP-Server mit Tokens in die **globale Config**. Secrets nie im Klartext,
+sondern per Variablen-Substitution:
+
+```jsonc
+// Env-Variable:
+"GITLAB_TOKEN": "{env:GITLAB_TOKEN}"
+
+// Datei (z.B. chmod 600):
+"PROMETHEUS_PASSWORD": "{file:~/.secrets/prometheus-password}"
+```
+
+---
+
+## Konfiguration in opencode.json
 
 ```jsonc
 {
