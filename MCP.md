@@ -40,32 +40,52 @@ Für diesen Agenten sind drei MCP Server relevant, die alle **lokal** betrieben 
       }
     },
 
-    // --- Prometheus ---
+    // --- Prometheus (Basic Auth) ---
     "prometheus": {
       "type": "local",
       "command": ["npx", "-y", "prometheus-mcp-server"],
       "enabled": true,
       "environment": {
-        "PROMETHEUS_URL": "http://prometheus.monitoring.svc.cluster.local:9090",
-        // Optional: Bearer Token wenn Prometheus auth-geschützt ist
-        // "PROMETHEUS_TOKEN": "Bearer eyJ...",
+        "PROMETHEUS_URL": "https://prometheus.example.com",
+        "PROMETHEUS_USERNAME": "monitoring-user",
+        "PROMETHEUS_PASSWORD": "secret",
         // Optional: self-signed certs ignorieren
         // "PROMETHEUS_INSECURE": "true"
       }
     },
 
     // --- Alertmanager ---
-    // Verbindet sich automatisch via kubeconfig (kein ALERTMANAGER_URL nötig)
-    // Default: openshift-monitoring/alertmanager-operated:9093
+    // Drei Optionen — siehe Alertmanager-Abschnitt weiter unten.
+    //
+    // Option A: K8s-Auto-Connect (kein Basic Auth nötig, empfohlen im Cluster)
     "alertmanager": {
       "type": "local",
       "command": ["npx", "-y", "mcp-alertmanager@latest"],
-      "enabled": true,
-      // Alternativ direkte URL statt K8s-Auto-Connect:
-      // "environment": {
-      //   "ALERTMANAGER_URL": "http://alertmanager.monitoring.svc.cluster.local:9093"
-      // }
+      "enabled": true
     }
+    //
+    // Option B: Basic Auth via Ingress (Python, ntk148v)
+    // "alertmanager": {
+    //   "type": "local",
+    //   "command": ["uv", "run", "--directory", "/opt/alertmanager-mcp-server",
+    //               "src/alertmanager_mcp_server/server.py"],
+    //   "enabled": true,
+    //   "environment": {
+    //     "ALERTMANAGER_URL": "https://alertmanager.example.com",
+    //     "ALERTMANAGER_USERNAME": "admin",
+    //     "ALERTMANAGER_PASSWORD": "secret"
+    //   }
+    // }
+    //
+    // Option C: Basic Auth / Bearer Token via CLI-Flag (Go Binary, zekker6)
+    // "alertmanager": {
+    //   "type": "local",
+    //   "command": ["/usr/local/bin/mcp-alertmanager",
+    //               "-url", "https://alertmanager.example.com",
+    //               "-username", "admin",
+    //               "-password-file", "/etc/alertmanager-mcp/password"],
+    //   "enabled": true
+    // }
 
   }
 }
@@ -123,6 +143,27 @@ Zeig mir die values.yaml im Helm-Chart Repo.
 **Package:** `prometheus-mcp-server` (v1.x)
 **Tools:** 5 Tools
 
+### Authentifizierung (Basic Auth)
+
+`prometheus-mcp-server` unterstützt Basic Auth nativ via Umgebungsvariablen:
+
+```jsonc
+"environment": {
+  "PROMETHEUS_URL": "https://prometheus.example.com",
+  "PROMETHEUS_USERNAME": "monitoring-user",
+  "PROMETHEUS_PASSWORD": "secret"
+}
+```
+
+Weitere Auth-Optionen:
+
+| Variable | Beschreibung |
+|---|---|
+| `PROMETHEUS_USERNAME` | Basic Auth Benutzername |
+| `PROMETHEUS_PASSWORD` | Basic Auth Passwort |
+| `PROMETHEUS_TOKEN` | Bearer Token (alternativ zu Basic Auth) |
+| `PROMETHEUS_INSECURE` | `true` um self-signed TLS-Certs zu ignorieren |
+
 ### Tools
 
 | Tool | Beschreibung |
@@ -149,39 +190,131 @@ Gibt es Metrics für den Ingress-Controller?
 
 ## Alertmanager MCP
 
-**Package:** `mcp-alertmanager` (v2.x, Go-Binary)
-**Tools:** 12 Tools
+Es gibt mehrere Implementierungen mit unterschiedlichen Auth-Optionen:
 
-Der Alertmanager MCP verbindet sich **nativ via kubeconfig** ohne `kubectl port-forward`.
-Standardmäßig wird `openshift-monitoring/alertmanager-operated:9093` gesucht.
-Für andere Namespaces oder Services CLI-Flags verwenden:
+| Projekt | Auth | Sprache | Installation |
+|---|---|---|---|
+| `jeanlopezxyz/mcp-alertmanager` | K8s-Auto-Connect (kubeconfig), kein Basic Auth | Go | `npx` |
+| `ntk148v/alertmanager-mcp-server` | Basic Auth via Env-Variablen, Pagination | Python | `uv` + clone |
+| `zekker6/mcp-alertmanager` | Basic Auth via CLI-Flag, beliebige Headers (Bearer) | Go | Binary selbst bauen |
+
+---
+
+### Option A: `jeanlopezxyz/mcp-alertmanager` — K8s-Auto-Connect (kein Ingress nötig)
+
+**Empfohlen wenn:** Alertmanager läuft im gleichen Cluster und kubeconfig verfügbar ist.
+
+**Nicht geeignet für:** Zugriff über Ingress mit Basic Auth.
 
 ```jsonc
-"command": [
-  "npx", "-y", "mcp-alertmanager@latest",
-  "--namespace", "monitoring",
-  "--service", "alertmanager-operated",
-  "--service-port", "9093",
-  "--service-scheme", "http"
-]
+"alertmanager": {
+  "type": "local",
+  "command": [
+    "npx", "-y", "mcp-alertmanager@latest",
+    "--namespace", "monitoring",
+    "--service", "alertmanager-operated",
+    "--service-port", "9093",
+    "--service-scheme", "http"
+  ],
+  "enabled": true
+}
 ```
 
-### Tools
+**Tools (12):** `getAlerts`, `getCriticalAlerts`, `getAlertingSummary`, `getAlertGroups`,
+`investigateAlert`, `correlateAlerts`, `getAlertHistory`, `getSilences`,
+`createSilence`, `deleteSilence`, `getAlertmanagerStatus`, `getReceivers`
 
-| Tool | Beschreibung |
-|---|---|
-| `getAlerts` | Alle aktiven Alerts (mit Filtern) |
-| `getCriticalAlerts` | Nur Critical-Alerts |
-| `getAlertingSummary` | Übersicht: Anzahl nach Severity |
-| `getAlertGroups` | Alerts gruppiert nach Routing |
-| `investigateAlert` | Deep-dive in einen einzelnen Alert |
-| `correlateAlerts` | Korrelierte Alerts zur Root-cause-Analyse |
-| `getAlertHistory` | Alert-Historie und Analyse |
-| `getSilences` | Aktive Silences auflisten |
-| `createSilence` | Silence anlegen |
-| `deleteSilence` | Silence löschen |
-| `getAlertmanagerStatus` | Server-Status und Cluster-Info |
-| `getReceivers` | Konfigurierte Notification-Receiver |
+---
+
+### Option B: `ntk148v/alertmanager-mcp-server` — Basic Auth via Env (Python)
+
+**Empfohlen wenn:** Zugriff über Ingress mit Basic Auth, oder Keycloak-Token als Bearer.
+
+**Voraussetzungen:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
+
+```bash
+git clone https://github.com/ntk148v/alertmanager-mcp-server.git /opt/alertmanager-mcp-server
+cd /opt/alertmanager-mcp-server && make setup
+```
+
+```jsonc
+"alertmanager": {
+  "type": "local",
+  "command": [
+    "uv", "run",
+    "--directory", "/opt/alertmanager-mcp-server",
+    "src/alertmanager_mcp_server/server.py"
+  ],
+  "enabled": true,
+  "environment": {
+    "ALERTMANAGER_URL": "https://alertmanager.example.com",
+    "ALERTMANAGER_USERNAME": "admin",
+    "ALERTMANAGER_PASSWORD": "secret"
+    // Optional für Keycloak Bearer Token statt Basic Auth:
+    // Token muss extern geholt und als ALERTMANAGER_PASSWORD übergeben werden
+    // (kein natives OAuth-Flow, aber Bearer via Header möglich)
+  }
+}
+```
+
+**Besonderheit: Pagination** — gibt Alerts seitenweise zurück (Standard: 10 pro Seite)
+um Context-Overflow bei vielen Alerts zu vermeiden.
+
+**Tools (8):** `get_status`, `get_alerts` (paginiert), `get_silences` (paginiert),
+`post_silence`, `delete_silence`, `get_receivers`, `get_alert_groups` (paginiert),
+`create_alert`
+
+---
+
+### Option C: `zekker6/mcp-alertmanager` — Basic Auth + custom Headers (Go Binary)
+
+**Empfohlen wenn:** Go-Binary bevorzugt, kein Python gewünscht, oder Bearer Token
+(z.B. Keycloak) via `-header` Flag nötig.
+
+**Voraussetzungen:** Go 1.22+, [task](https://taskfile.dev) Build-Tool
+
+```bash
+git clone https://github.com/zekker6/mcp-alertmanager.git /opt/zekker6-alertmanager-mcp
+cd /opt/zekker6-alertmanager-mcp && task build
+cp bin/mcp-alertmanager /usr/local/bin/
+```
+
+Basic Auth via Password-File (sicherer als Klartext):
+```bash
+echo -n "geheimes-passwort" > /etc/alertmanager-mcp/password
+chmod 600 /etc/alertmanager-mcp/password
+```
+
+```jsonc
+// Basic Auth:
+"alertmanager": {
+  "type": "local",
+  "command": [
+    "/usr/local/bin/mcp-alertmanager",
+    "-url", "https://alertmanager.example.com",
+    "-username", "admin",
+    "-password-file", "/etc/alertmanager-mcp/password"
+  ],
+  "enabled": true
+}
+
+// Alternativ: Keycloak Bearer Token via Header:
+"alertmanager": {
+  "type": "local",
+  "command": [
+    "/usr/local/bin/mcp-alertmanager",
+    "-url", "https://alertmanager.example.com",
+    "-header", "Authorization: Bearer <keycloak-access-token>"
+  ],
+  "enabled": true
+}
+```
+
+> **Hinweis Keycloak:** Der Token muss extern beschafft und manuell eingetragen
+> werden — kein automatischer OAuth-Flow. Für automatische Token-Erneuerung
+> wäre ein Wrapper-Script nötig.
+
+**Tools (5):** `list_alerts`, `list_silences`, `get_silence`, `create_silence`, `delete_silence`
 
 ### Beispiel-Prompts
 
@@ -211,7 +344,9 @@ hinzu — unabhängig davon ob die Tools genutzt werden. Richtwerte:
 | GitLab (voll) | 44 | ~8.000–12.000 |
 | GitLab (reduziert) | ~20 | ~4.000–6.000 |
 | Prometheus | 5 | ~500–800 |
-| Alertmanager | 12 | ~1.500–2.000 |
+| Alertmanager (jeanlopezxyz) | 12 | ~1.500–2.000 |
+| Alertmanager (ntk148v) | 8 | ~1.000–1.500 |
+| Alertmanager (zekker6) | 5 | ~500–800 |
 
 Empfehlung: Nicht benötigte GitLab Feature Flags deaktivieren und MCP Server
 nur aktivieren wenn sie für die aktuelle Aufgabe gebraucht werden.
