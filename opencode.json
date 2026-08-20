@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (Mac)",
+      "options": {
+        "baseURL": "http://192.168.0.27:11434/v1"
+      },
+      "models": {
+        "ornith-k8sr:latest": {
+          "name": "Ornith K8S",
+          "modelID": "ornith-k8s:latest",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "timeout": 600000
+        }
+      }
+    }
+  },
+  "env": {
+    "PAGER": "cat",
+    "LESS": "-FRX"
+  },
+  "permission": {
+    "bash": "allow",
+    "edit": "allow",
+    "write": "allow",
+    "read": "allow",
+    "task": "allow"
+  }
+}
