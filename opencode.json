@@ -8,7 +8,7 @@
         "baseURL": "http://192.168.0.27:11434/v1"
       },
       "models": {
-        "ornith-k8sr:latest": {
+        "ornith-k8s:latest": {
           "name": "Ornith K8S",
           "modelID": "ornith-k8s:latest",
           "capabilities": {
