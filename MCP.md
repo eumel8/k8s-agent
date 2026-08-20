@@ -1,55 +1,62 @@
-# MCP Server für den Kubernetes DevOps Agent
+# MCP Servers for the Kubernetes DevOps Agent
 
-## Überblick
+## Overview
 
-Für diesen Agenten sind drei MCP Server relevant, die alle **lokal** betrieben werden und
-**keine externen Cloud-Dienste** benötigen:
+Three MCP servers are relevant for this agent, all run **locally** and
+**no external cloud services** required:
 
-| MCP Server | Zweck | Package |
+| MCP Server | Purpose | Package |
 |---|---|---|
 | GitLab | Issues, MRs, Pipelines, CI/CD | `@structured-world/gitlab-mcp` |
-| Prometheus | Metrics abfragen, Targets prüfen | `prometheus-mcp-server` |
-| Alertmanager | Alerts, Silences, Root-cause | `mcp-alertmanager` |
+| Prometheus | Query metrics, check targets | `prometheus-mcp-server` |
+| Alertmanager | Alerts, silences, root-cause analysis | `mcp-alertmanager` |
 
 ---
 
-## Voraussetzungen
+## Prerequisites
 
-- Node.js >= 24 (für GitLab und Prometheus MCP)
-- Zugang zum internen GitLab Server
-- GitLab Personal Access Token (Scope: `api` oder `read_api`)
-- Prometheus und Alertmanager erreichbar (URL oder via kubeconfig)
+- Node.js >= 24 (for GitLab and Prometheus MCP)
+- Access to the internal GitLab server
+- GitLab Personal Access Token (scope: `api` or `read_api`)
+- Prometheus and Alertmanager reachable (URL or via kubeconfig)
 
 ---
 
-## Ablageort der Konfiguration
+## Configuration Locations
 
-Die `opencode.json` kann an zwei Orten liegen — beide werden zusammengeführt:
+The `opencode.json` can exist in two places — both are merged:
 
-| Ort | Zweck | Git-tauglich |
+| Location | Purpose | Git-safe |
 |---|---|---|
-| `~/.config/opencode/opencode.json` | Global für alle Projekte | Nein (enthält Secrets) |
-| `<projektverzeichnis>/opencode.json` | Projektspezifisch | Ja (nur ohne Secrets) |
+| `~/.config/opencode/opencode.json` | Global for all projects | No (contains secrets) |
+| `<project-directory>/opencode.json` | Project-specific | Yes (without secrets) |
 
-**Empfehlung:** MCP-Server mit Tokens in die **globale Config**. Secrets nie im Klartext,
-sondern per Variablen-Substitution:
+**Recommendation:** MCP servers with tokens go in the **global config**. Never store
+secrets in plaintext — use variable substitution:
 
 ```jsonc
-// Env-Variable:
+// Env variable:
 "GITLAB_TOKEN": "{env:GITLAB_TOKEN}"
 
-// Datei (z.B. chmod 600):
+// File (e.g. chmod 600):
 "PROMETHEUS_PASSWORD": "{file:~/.secrets/prometheus-password}"
 ```
 
 ---
 
-## Konfiguration in opencode.json
+## Configuration in opencode.json
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
+
+    // --- Agentmemory ---
+    "agentmemory": {
+      "type": "local",
+      "command": ["npx", "-y", "@agentmemory/mcp"],
+      "enabled": true
+    },
 
     // --- GitLab ---
     "gitlab": {
@@ -71,15 +78,15 @@ sondern per Variablen-Substitution:
         "PROMETHEUS_URL": "https://prometheus.example.com",
         "PROMETHEUS_USERNAME": "monitoring-user",
         "PROMETHEUS_PASSWORD": "secret",
-        // Optional: self-signed certs ignorieren
+        // Optional: ignore self-signed certs
         // "PROMETHEUS_INSECURE": "true"
       }
     },
 
     // --- Alertmanager ---
-    // Drei Optionen — siehe Alertmanager-Abschnitt weiter unten.
+    // Three options — see Alertmanager section below.
     //
-    // Option A: K8s-Auto-Connect (kein Basic Auth nötig, empfohlen im Cluster)
+    // Option A: K8s auto-connect (no Basic Auth needed, recommended inside cluster)
     "alertmanager": {
       "type": "local",
       "command": ["npx", "-y", "mcp-alertmanager@latest"],
@@ -99,7 +106,7 @@ sondern per Variablen-Substitution:
     //   }
     // }
     //
-    // Option C: Basic Auth / Bearer Token via CLI-Flag (Go Binary, zekker6)
+    // Option C: Basic Auth / Bearer Token via CLI flag (Go binary, zekker6)
     // "alertmanager": {
     //   "type": "local",
     //   "command": ["/usr/local/bin/mcp-alertmanager",
@@ -109,31 +116,57 @@ sondern per Variablen-Substitution:
     //   "enabled": true
     // }
 
-  }
+  },
+  "plugin": ["./plugins/agentmemory-capture.ts"]
 }
 ```
 
 ---
 
+## Agentmemory
+
+**Package:** `@agentmemory/mcp`
+**Tools:** 12 memory categories
+
+| Tool | Description |
+|---|---|
+| `agentmemory_memory_save` | Save insights/decisions to long-term memory |
+| `agentmemory_memory_recall` | Search past session observations |
+| `agentmemory_memory_smart_search` | Hybrid semantic+keyword search |
+| `agentmemory_memory_sessions` | List recent sessions |
+| `agentmemory_memory_export` | Export all memory as JSON |
+| `agentmemory_memory_audit` | View audit trail |
+| `agentmemory_memory_governance_delete` | Delete memories with audit trail |
+
+```jsonc
+  "mcp": {
+    "agentmemory": {
+      "type": "local",
+      "command": ["npx", "-y", "@agentmemory/mcp"],
+      "enabled": true
+    }
+  },
+  "plugin": ["./plugins/agentmemory-capture.ts"]
+```
+
 ## GitLab MCP
 
 **Package:** `@structured-world/gitlab-mcp` (v7.x)
-**Tools:** 44 Tools über 18 Entity-Typen
+**Tools:** 44 tools across 18 entity types
 
-### Wichtigste Tools
+### Key Tools
 
-| Tool | Beschreibung |
+| Tool | Description |
 |---|---|
-| `browse_projects` | Projekte suchen und auflisten |
-| `browse_merge_requests` | MRs filtern (state, author, ...) |
-| `manage_issues` | Issues erstellen, lesen, schließen |
-| `browse_pipelines` | Pipeline-Status und Logs |
-| `browse_files` | Dateien im Repository lesen |
+| `browse_projects` | Search and list projects |
+| `browse_merge_requests` | Filter MRs (state, author, etc.) |
+| `manage_issues` | Create, read, close issues |
+| `browse_pipelines` | Pipeline status and logs |
+| `browse_files` | Read files in repository |
 
-### Feature Flags (selektiv deaktivieren)
+### Feature Flags (selective disable)
 
-Nicht benötigte Tool-Gruppen lassen sich per Umgebungsvariable abschalten,
-um den Token-Verbrauch zu reduzieren:
+Unused tool groups can be disabled via environment variables to reduce token consumption:
 
 ```jsonc
 "environment": {
@@ -146,16 +179,16 @@ um den Token-Verbrauch zu reduzieren:
 }
 ```
 
-### Beispiel-Prompts
+### Example Prompts
 
 ```
-Zeig mir alle offenen MRs im Projekt k8s-agent.
+Show me all open MRs in the k8s-agent project.
 
-Erstelle ein Issue "OOMKilled in production namespace" mit Label "bug".
+Create an issue "OOMKilled in production namespace" with label "bug".
 
-Was ist der Status der letzten Pipeline auf dem main Branch?
+What is the status of the latest pipeline on the main branch?
 
-Zeig mir die values.yaml im Helm-Chart Repo.
+Show me the values.yaml in the Helm chart repo.
 ```
 
 ---
@@ -163,11 +196,11 @@ Zeig mir die values.yaml im Helm-Chart Repo.
 ## Prometheus MCP
 
 **Package:** `prometheus-mcp-server` (v1.x)
-**Tools:** 5 Tools
+**Tools:** 5 tools
 
-### Authentifizierung (Basic Auth)
+### Authentication (Basic Auth)
 
-`prometheus-mcp-server` unterstützt Basic Auth nativ via Umgebungsvariablen:
+`prometheus-mcp-server` supports Basic Auth natively via environment variables:
 
 ```jsonc
 "environment": {
@@ -177,56 +210,56 @@ Zeig mir die values.yaml im Helm-Chart Repo.
 }
 ```
 
-Weitere Auth-Optionen:
+Additional auth options:
 
-| Variable | Beschreibung |
+| Variable | Description |
 |---|---|
-| `PROMETHEUS_USERNAME` | Basic Auth Benutzername |
-| `PROMETHEUS_PASSWORD` | Basic Auth Passwort |
-| `PROMETHEUS_TOKEN` | Bearer Token (alternativ zu Basic Auth) |
-| `PROMETHEUS_INSECURE` | `true` um self-signed TLS-Certs zu ignorieren |
+| `PROMETHEUS_USERNAME` | Basic Auth username |
+| `PROMETHEUS_PASSWORD` | Basic Auth password |
+| `PROMETHEUS_TOKEN` | Bearer token (alternative to Basic Auth) |
+| `PROMETHEUS_INSECURE` | `true` to ignore self-signed TLS certs |
 
 ### Tools
 
-| Tool | Beschreibung |
+| Tool | Description |
 |---|---|
-| `prom_query` | PromQL Instant Query (aktueller Wert) |
-| `prom_range` | PromQL Range Query (Zeitreihe / Trends) |
-| `prom_discover` | Verfügbare Metrics auflisten |
-| `prom_metadata` | Metric-Typ und Beschreibung |
-| `prom_targets` | Scrape-Target Status und Health |
+| `prom_query` | PromQL instant query (current value) |
+| `prom_range` | PromQL range query (time series / trends) |
+| `prom_discover` | List available metrics |
+| `prom_metadata` | Metric type and description |
+| `prom_targets` | Scrape target status and health |
 
-### Beispiel-Prompts
+### Example Prompts
 
 ```
-Welche Pods verbrauchen gerade am meisten Memory im Namespace production?
+Which pods are consuming the most memory right now in the production namespace?
 
-Zeig mir die CPU-Last aller Nodes der letzten 2 Stunden.
+Show me the CPU load of all nodes over the last 2 hours.
 
-Welche Scrape-Targets sind aktuell down?
+Which scrape targets are currently down?
 
-Gibt es Metrics für den Ingress-Controller?
+Are there metrics for the ingress controller?
 ```
 
 ---
 
 ## Alertmanager MCP
 
-Es gibt mehrere Implementierungen mit unterschiedlichen Auth-Optionen:
+There are multiple implementations with different auth options:
 
-| Projekt | Auth | Sprache | Installation |
+| Project | Auth | Language | Installation |
 |---|---|---|---|
-| `jeanlopezxyz/mcp-alertmanager` | K8s-Auto-Connect (kubeconfig), kein Basic Auth | Go | `npx` |
-| `ntk148v/alertmanager-mcp-server` | Basic Auth via Env-Variablen, Pagination | Python | `uv` + clone |
-| `zekker6/mcp-alertmanager` | Basic Auth via CLI-Flag, beliebige Headers (Bearer) | Go | Binary selbst bauen |
+| `jeanlopezxyz/mcp-alertmanager` | K8s auto-connect (kubeconfig), no Basic Auth | Go | `npx` |
+| `ntk148v/alertmanager-mcp-server` | Basic Auth via env variables, pagination | Python | `uv` + clone |
+| `zekker6/mcp-alertmanager` | Basic Auth via CLI flag, arbitrary headers (Bearer) | Go | Build binary |
 
 ---
 
-### Option A: `jeanlopezxyz/mcp-alertmanager` — K8s-Auto-Connect (kein Ingress nötig)
+### Option A: `jeanlopezxyz/mcp-alertmanager` — K8s Auto-Connect (no Ingress needed)
 
-**Empfohlen wenn:** Alertmanager läuft im gleichen Cluster und kubeconfig verfügbar ist.
+**Recommended when:** Alertmanager runs in the same cluster and kubeconfig is available.
 
-**Nicht geeignet für:** Zugriff über Ingress mit Basic Auth.
+**Not suitable for:** Access via Ingress with Basic Auth.
 
 ```jsonc
 "alertmanager": {
@@ -250,9 +283,9 @@ Es gibt mehrere Implementierungen mit unterschiedlichen Auth-Optionen:
 
 ### Option B: `ntk148v/alertmanager-mcp-server` — Basic Auth via Env (Python)
 
-**Empfohlen wenn:** Zugriff über Ingress mit Basic Auth, oder Keycloak-Token als Bearer.
+**Recommended when:** Access via Ingress with Basic Auth, or Keycloak token as Bearer.
 
-**Voraussetzungen:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
+**Prerequisites:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
 
 ```bash
 git clone https://github.com/ntk148v/alertmanager-mcp-server.git /opt/alertmanager-mcp-server
@@ -272,28 +305,28 @@ cd /opt/alertmanager-mcp-server && make setup
     "ALERTMANAGER_URL": "https://alertmanager.example.com",
     "ALERTMANAGER_USERNAME": "admin",
     "ALERTMANAGER_PASSWORD": "secret"
-    // Optional für Keycloak Bearer Token statt Basic Auth:
-    // Token muss extern geholt und als ALERTMANAGER_PASSWORD übergeben werden
-    // (kein natives OAuth-Flow, aber Bearer via Header möglich)
+    // Optional for Keycloak Bearer token instead of Basic Auth:
+    // Token must be fetched externally and passed as ALERTMANAGER_PASSWORD
+    // (no native OAuth flow, but Bearer via header is possible)
   }
 }
 ```
 
-**Besonderheit: Pagination** — gibt Alerts seitenweise zurück (Standard: 10 pro Seite)
-um Context-Overflow bei vielen Alerts zu vermeiden.
+**Notable feature: Pagination** — returns alerts in pages (default: 10 per page) to
+avoid context overflow with many alerts.
 
-**Tools (8):** `get_status`, `get_alerts` (paginiert), `get_silences` (paginiert),
-`post_silence`, `delete_silence`, `get_receivers`, `get_alert_groups` (paginiert),
+**Tools (8):** `get_status`, `get_alerts` (paginated), `get_silences` (paginated),
+`post_silence`, `delete_silence`, `get_receivers`, `get_alert_groups` (paginated),
 `create_alert`
 
 ---
 
-### Option C: `zekker6/mcp-alertmanager` — Basic Auth + custom Headers (Go Binary)
+### Option C: `zekker6/mcp-alertmanager` — Basic Auth + Custom Headers (Go Binary)
 
-**Empfohlen wenn:** Go-Binary bevorzugt, kein Python gewünscht, oder Bearer Token
-(z.B. Keycloak) via `-header` Flag nötig.
+**Recommended when:** Go binary preferred, no Python desired, or Bearer token
+(e.g. Keycloak) needed via `-header` flag.
 
-**Voraussetzungen:** Go 1.22+, [task](https://taskfile.dev) Build-Tool
+**Prerequisites:** Go 1.22+, [task](https://taskfile.dev) build tool
 
 ```bash
 git clone https://github.com/zekker6/mcp-alertmanager.git /opt/zekker6-alertmanager-mcp
@@ -301,9 +334,9 @@ cd /opt/zekker6-alertmanager-mcp && task build
 cp bin/mcp-alertmanager /usr/local/bin/
 ```
 
-Basic Auth via Password-File (sicherer als Klartext):
+Basic Auth via password file (more secure than plaintext):
 ```bash
-echo -n "geheimes-passwort" > /etc/alertmanager-mcp/password
+echo -n "secret-password" > /etc/alertmanager-mcp/password
 chmod 600 /etc/alertmanager-mcp/password
 ```
 
@@ -320,7 +353,7 @@ chmod 600 /etc/alertmanager-mcp/password
   "enabled": true
 }
 
-// Alternativ: Keycloak Bearer Token via Header:
+// Alternatively: Keycloak Bearer token via header:
 "alertmanager": {
   "type": "local",
   "command": [
@@ -332,43 +365,42 @@ chmod 600 /etc/alertmanager-mcp/password
 }
 ```
 
-> **Hinweis Keycloak:** Der Token muss extern beschafft und manuell eingetragen
-> werden — kein automatischer OAuth-Flow. Für automatische Token-Erneuerung
-> wäre ein Wrapper-Script nötig.
+> **Keycloak note:** The token must be fetched externally and entered manually —
+> no automatic OAuth flow. For automatic token renewal, a wrapper script would be needed.
 
 **Tools (5):** `list_alerts`, `list_silences`, `get_silence`, `create_silence`, `delete_silence`
 
-### Beispiel-Prompts
+### Example Prompts
 
 ```
-Welche Alerts feuern gerade?
+Which alerts are firing right now?
 
-Gibt es kritische Alerts im Namespace production?
+Are there critical alerts in the production namespace?
 
-Gib mir eine Zusammenfassung aller aktiven Alerts nach Severity.
+Give me a summary of all active alerts by severity.
 
-Untersuche den Alert "KubePodCrashLooping" — was könnte die Ursache sein?
+Investigate the "KubePodCrashLooping" alert — what could be the cause?
 
-Finde korrelierte Alerts um die Root Cause zu identifizieren.
+Find correlated alerts to identify the root cause.
 
-Lege eine 2-Stunden Silence für den Alert "PodCrashLooping" im Namespace staging an.
+Create a 2-hour silence for the "PodCrashLooping" alert in the staging namespace.
 ```
 
 ---
 
-## Hinweis: Token-Verbrauch
+## Note: Token Consumption
 
-Jeder aktive MCP Server fügt seine Tool-Definitionen bei **jedem Request** zum Kontext
-hinzu — unabhängig davon ob die Tools genutzt werden. Richtwerte:
+Every active MCP server adds its tool definitions to the context on **every request** —
+regardless of whether the tools are actually used. Approximate values:
 
-| MCP Server | Tools | ca. Token overhead |
+| MCP Server | Tools | Approx. token overhead |
 |---|---|---|
-| GitLab (voll) | 44 | ~8.000–12.000 |
-| GitLab (reduziert) | ~20 | ~4.000–6.000 |
+| GitLab (full) | 44 | ~8,000–12,000 |
+| GitLab (reduced) | ~20 | ~4,000–6,000 |
 | Prometheus | 5 | ~500–800 |
-| Alertmanager (jeanlopezxyz) | 12 | ~1.500–2.000 |
-| Alertmanager (ntk148v) | 8 | ~1.000–1.500 |
+| Alertmanager (jeanlopezxyz) | 12 | ~1,500–2,000 |
+| Alertmanager (ntk148v) | 8 | ~1,000–1,500 |
 | Alertmanager (zekker6) | 5 | ~500–800 |
 
-Empfehlung: Nicht benötigte GitLab Feature Flags deaktivieren und MCP Server
-nur aktivieren wenn sie für die aktuelle Aufgabe gebraucht werden.
+Recommendation: Disable unused GitLab feature flags and only enable MCP servers
+when needed for the current task.

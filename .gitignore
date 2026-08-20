@@ -1,2 +1,4 @@
 .opencode/node_modules
 .opencode/*.json
+opencode.json.ollama
+ses*
