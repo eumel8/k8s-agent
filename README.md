@@ -77,6 +77,30 @@ Structured incident response playbook with:
 - **Common runbooks** — CrashLoopBackOff, Pod Pending, Node NotReady
 - **Communication templates** — during-incident updates and post-incident summaries
 
+## Known Issues
+
+### Ollama Qwen2.5-based models: `No user query found in messages`
+
+When using Qwen2.5-based models (including Ornith) with Ollama's OpenAI-compatible API (`/v1/chat/completions`), requests without an explicit `role: "user"` message cause a 500 error:
+
+```text
+Jinja Exception: No user query found in messages.
+```
+
+This affects OpenCode's `small_model` calls (session title generation etc.) which sometimes send only system+assistant messages. The Jinja chat template embedded in the Ollama binary enforces a user message in `multi_step_tool` mode.
+
+**Upstream bug:** [ollama/ollama#17813](https://github.com/ollama/ollama/issues/17813) — `renderers/qwen: tolerate transcripts without a plain user query` (open, in progress as of v0.32.15).
+
+**Workaround:** Set `small_model` in `opencode.json` to a different provider that does not use the Qwen2.5 template:
+
+```json
+{
+  "small_model": "qwen3.5:27b"
+}
+```
+
+This routes internal OpenCode requests (session titles, summaries) to a different backend while keeping the main `model` on the local Ollama instance for air-gapped operation.
+
 ## Prerequisites
 
 - [OpenCode](https://opencode.ai) CLI
